@@ -1,0 +1,61 @@
+﻿{
+  "Log": {
+    "Level": "debug"
+  },
+  "Services": [
+    {
+      "Name": "Hypixel-in",
+      "Listen": 25565,
+      "IPAccess": {
+        "Mode": ""
+      },
+      "Outbound": {
+        "Type": ""
+      }
+    }
+  ],
+  "Router": {
+    "DefaultOutbound": "Hypixel-out",
+    "Rules": [
+      {
+        "Type": "always",
+        "Rewrite": {
+
+        },
+        "Sniff": "minecraft"
+      }
+    ]
+  },
+  "Outbounds": [
+    {
+      "Name": "Hypixel-out",
+      "TargetAddress": "mc.hypixel.net",
+      "TargetPort": 25565,
+      "Minecraft": {
+        "EnableHostnameRewrite": true,
+        "OnlineCount": {
+          "Max": 20,
+          "Online": -1,
+          "EnableMaxLimit": false
+        },
+        "HostnameAccess": {
+          "Mode": ""
+        },
+        "NameAccess": {
+          "Mode": ""
+        },
+        "PingMode": "",
+        "MotdFavicon": "data:image/png;base64,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",
+        "MotdDescription": "Default Motd"
+      },
+      "ProxyOptions": {
+        "Type": "",
+        "Network": "tcp",
+        "Address": ""
+      }
+    }
+  ],
+  "Lists": {
+
+  }
+}

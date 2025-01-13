@@ -1,0 +1,47 @@
+# Build Folders
+bin/
+obj/
+
+# Rider project files
+.idea/
+*.sln.iml
+*.sln.DotSettings
+*.sln.DotSettings.user
+/.idea/
+/_ReSharper.Caches/
+/riderModule.iml
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Auto-generated files
+*.log
+*.tlog
+*.vspscc
+*.vssscc
+
+# Packages
+/packages/
+*.nupkg
+*.snupkg
+
+# Visual Studio Code
+.vscode/
+.vs/
+
+# Windows image file caches
+Thumbs.db
+ehthumbs.db
+
+# Folder config file
+Desktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# Windows shortcuts
+*.lnk
