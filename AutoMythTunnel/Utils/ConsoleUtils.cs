@@ -8,7 +8,7 @@ public static class ConsoleUtils
         ConsoleKey key;
         do
         {
-            var keyInfo = Console.ReadKey(intercept: true);
+            ConsoleKeyInfo keyInfo = Console.ReadKey(intercept: true);
             key = keyInfo.Key;
 
             if (key == ConsoleKey.Backspace && password.Length > 0)

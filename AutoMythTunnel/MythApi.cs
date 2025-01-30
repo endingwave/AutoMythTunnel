@@ -85,12 +85,12 @@ public class MythApi
         return response["code"].GetValue<int>() == 0;
     }
 
-    public static bool AddAccount(string name)
+    public static bool AddAccount(string name, bool forceJoin = false)
     {
         string url = $"{_baseUrl}/JSIP/Proxy/Account";
-        JsonObject requestBody = new JsonObject
+        JsonObject requestBody = new()
         {
-            ["Attach"] = "{}",
+            ["Attach"] = forceJoin ? "{\"Direct\":true}" : "{}",
             ["Email"] = "",
             ["Oa2ClientId"] = "54473e32-df8f-42e9-a649-9419b0dab9d3",
             ["Oa2RefreshToken"] = "",
@@ -105,8 +105,15 @@ public class MythApi
         }
         return true;
     }
+
+    public static string GetNewServer(string serverIp = "mc.hypixel.net")
+    {
+        string url = $"{_baseUrl}/JSIP/Proxy/Get?gameServer={serverIp}";
+        JsonObject response = HttpUtils.GetJson(url, new Dictionary<string, string> { { UserInfo.TokenName, UserInfo.TokenValue } });
+        return response["msg"].GetValue<string>();
+    }
     
-    public static ServerInfo? GetServer()
+    public static ServerInfo? GetExistedServer()
     {
         string url = $"{_baseUrl}/JSIP/Proxy/Query";
         JsonObject response = HttpUtils.GetJson(url, new Dictionary<string, string> { { UserInfo.TokenName, UserInfo.TokenValue } });
@@ -139,5 +146,22 @@ public class MythApi
         string url = $"{_baseUrl}/JSIP/Proxy/Renew/{id}/60";
         JsonObject response = HttpUtils.GetJson(url, new Dictionary<string, string> { { UserInfo.TokenName, UserInfo.TokenValue } });
         return response["code"].GetValue<int>() == 0;
+    }
+
+    public static EnteranceServerInfo[] GetEnteranceServers(string serverIp = "mc.hypixel.net")
+    {
+        string url = $"{_baseUrl}/JSIP/Proxy/Address?gameServer={serverIp}";
+        JsonObject response = HttpUtils.GetJson(url, new Dictionary<string, string> { { UserInfo.TokenName, UserInfo.TokenValue } });
+        if (response["code"].GetValue<int>() != 0)
+        {
+            throw new ApiFailedException(response["msg"].GetValue<string>());
+        }
+        EnteranceServerInfo[] servers = response["data"].AsArray().Select(server => new EnteranceServerInfo
+        {
+            CmccServer = server["CmccServer"].GetValue<string>(),
+            CtccServer = server["CtccServer"].GetValue<string>(),
+            CuccServer = server["CuccServer"].GetValue<string>(),
+        }).ToArray();
+        return servers;
     }
 }

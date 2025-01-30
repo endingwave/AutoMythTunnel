@@ -10,14 +10,45 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <PackageReference Include="CSCore" Version="1.2.1.2" />
+      <PackageReference Include="log4net" Version="3.0.3" />
+      <PackageReference Include="MineSharp.Bot" Version="1.0.0" />
       <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+      <PackageReference Include="SocksSharp" Version="1.1.1" />
+      <PackageReference Include="Spectre.Console" Version="0.49.1" />
+      <PackageReference Include="Spectre.Console.Extensions.Progress" Version="1.0.0" />
+      <PackageReference Include="Spectre.Console.Extensions.Table" Version="1.0.0" />
+      <PackageReference Include="System.Management" Version="9.0.1" />
     </ItemGroup>
 
     <ItemGroup>
-      <None Remove="Resources\zbp.exe" />
-      <EmbeddedResource Include="Resources\zbp.exe" />
-      <None Remove="Resources\ZBProxy.json" />
-      <EmbeddedResource Include="Resources\ZBProxy.json" />
+      <None Update="Resources\2kill.wav">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="Resources\3kill.wav">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="Resources\4kill.wav">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="Resources\5kill.wav">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="Resources\kill.wav">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="Resources\lose.wav">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="Resources\morekill.wav">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="Resources\win.wav">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="Resources\hit.wav">
+          <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
     </ItemGroup>
 
 </Project>
