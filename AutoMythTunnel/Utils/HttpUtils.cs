@@ -88,8 +88,19 @@ public class HttpUtils
     
     public static JsonObject GetJson(string url, Dictionary<string, string>? headers = null)
     {
-        string response = Get(url, headers);
-        return JsonNode.Parse(response).AsObject();
+        string response;
+        while (true)
+        {
+            response = Get(url, headers);
+            try
+            {
+                return JsonNode.Parse(response).AsObject();
+            }
+            catch (Exception e)
+            {
+                continue;
+            }
+        }
     }
     
     public static JsonObject PostJson(string url, string content, Dictionary<string, string>? headers = null)

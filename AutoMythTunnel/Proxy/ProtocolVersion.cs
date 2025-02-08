@@ -3,7 +3,8 @@
 public class ProtocolVersion(int version)
 {
     public static readonly List<int> SUPPORTED_VERSIONS = [47, 340];
-    
+    public int version { get; } = version;
+
     public int ParsePacketId(EnumPacketType enumPacketType)
     {
         int packetId = -1;
@@ -98,6 +99,7 @@ public class ProtocolVersion(int version)
                 0x20 => EnumPacketType.SERVER_ENTITY_PROPERTIES,
                 0x1c => EnumPacketType.SERVER_ENTITY_METADATA,
                 0x0b => EnumPacketType.SERVER_ANIMATION,
+                0x40 => EnumPacketType.SERVER_DISCONNECT,
                 _ => null
             },
             340 => packetId switch
@@ -110,6 +112,7 @@ public class ProtocolVersion(int version)
                 0x4e => EnumPacketType.SERVER_ENTITY_PROPERTIES,
                 0x3c => EnumPacketType.SERVER_ENTITY_METADATA,
                 0x06 => EnumPacketType.SERVER_ANIMATION,
+                0x1a => EnumPacketType.SERVER_DISCONNECT,
                 _ => null
             },
             _ => null

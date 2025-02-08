@@ -7,14 +7,15 @@ using Spectre.Console;
 
 namespace AutoMythTunnel.Proxy.Sniffer;
 
-public class PacketProcessor(PacketQueue c2sQueue, PacketQueue s2cQueue, MinecraftStream clientStream, MinecraftStream serverStream, CancellationTokenSource? cancellationToken, int compression = 256, string? injectCommand = null)
+public class PacketProcessor(PacketQueue c2sQueue, PacketQueue s2cQueue, MinecraftStream clientStream, MinecraftStream serverStream, CancellationTokenSource? cancellationToken, int compression = 256, string? injectCommand = null, bool offline = false)
 {
     private const int CompressionDisabled = -1;
     private int compressionThreshold = compression;
     
     private readonly ChatHandler chatHandler = new(injectCommand)
     {
-        protocolVersion = new(clientStream.protocolVersion)
+        protocolVersion = new(clientStream.protocolVersion),
+        offline = offline
     };
     
     public MinecraftStream clientStream { get; } = clientStream;
@@ -24,35 +25,39 @@ public class PacketProcessor(PacketQueue c2sQueue, PacketQueue s2cQueue, Minecra
     {
         cancellationToken ??= new CancellationTokenSource();
         ProtocolVersion protocolVersion = new(clientStream.protocolVersion);
-        while (!cancellationToken.Token.IsCancellationRequested)
+        List<Task> tasks =
+        [
+            Task.Run(() => ProcessS2C(protocolVersion), cancellationToken.Token),
+            Task.Run(() => ProcessC2S(protocolVersion), cancellationToken.Token)
+        ];
+        Task.WaitAll(tasks.ToArray());
+    }
+    
+    private void ProcessS2C(ProtocolVersion protocolVersion)
+    {
+        while (!cancellationToken!.Token.IsCancellationRequested)
         {
-            try
+            PacketBuffer? packet = s2cQueue.Dequeue();
+            if (packet == null) continue;
             {
-                int localCompressionThreshold = compressionThreshold;
-                int uncompressedLength = 0;
-                PacketBuffer? packet = s2cQueue.Dequeue();
-                if (packet != null)
-                {
-                    try
-                    {
-                        EnumPacketType? packetType = protocolVersion.ParsePacketType(EnumPacketWay.S2C, packet.ReadVarInt());
-                        if (packetType == null) continue;
-                        chatHandler.OnPacket(packetType.Value, packet, this);
-                    }
-                    catch
-                    {
-                        /*ignored*/
-                    }
-                }
+                EnumPacketType? packetType = protocolVersion.ParsePacketType(EnumPacketWay.S2C, packet.ReadVarInt());
+                if (packetType == null) continue;
+                chatHandler.OnPacket(packetType.Value, packet, this);
+            }
+        }
+    }
 
-                packet = c2sQueue.Dequeue();
-                if (packet == null) continue;
-                {
-                    EnumPacketType? packetType = protocolVersion.ParsePacketType(EnumPacketWay.C2S, packet.ReadVarInt());
-                    if (packetType == null) continue;
-                    chatHandler.OnPacket(packetType.Value, packet, this);
-                }
-            } catch { /*ignore*/ }
+    private void ProcessC2S(ProtocolVersion protocolVersion)
+    {
+        while (!cancellationToken!.Token.IsCancellationRequested)
+        {
+            PacketBuffer? packet = c2sQueue.Dequeue();
+            if (packet == null) continue;
+            {
+                EnumPacketType? packetType = protocolVersion.ParsePacketType(EnumPacketWay.C2S, packet.ReadVarInt());
+                if (packetType == null) continue;
+                chatHandler.OnPacket(packetType.Value, packet, this);
+            }
         }
     }
     

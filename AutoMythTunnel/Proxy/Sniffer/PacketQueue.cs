@@ -1,45 +1,49 @@
 ﻿using MineSharp.Core.Common;
 using MineSharp.Core.Serialization;
+using System.Threading;
 
 namespace AutoMythTunnel.Proxy.Sniffer;
 
 public class PacketQueue
 {
-    List<PacketBuffer> queue = new List<PacketBuffer>();
-    
+    private readonly List<PacketBuffer> queue = new();
+    private readonly object lockObject = new();
+
     public void Enqueue(PacketBuffer packet)
     {
-        lock (queue)
+        lock (lockObject)
         {
             queue.Add(packet);
+            Monitor.Pulse(lockObject); // Notify waiting threads that a packet is available
         }
     }
-    
+
     public PacketBuffer? Dequeue()
     {
-        lock (queue)
+        lock (lockObject)
         {
-            if (queue.Count == 0)
+            while (queue.Count == 0)
             {
-                return null;
+                Monitor.Wait(lockObject); // Wait until a packet is available
             }
             PacketBuffer packet = queue[0];
             queue.RemoveAt(0);
             return packet;
         }
     }
-    
+
     public void Clear()
     {
-        lock (queue)
+        lock (lockObject)
         {
             queue.Clear();
+            Monitor.PulseAll(lockObject); // Notify all waiting threads
         }
     }
-    
+
     public int Count()
     {
-        lock (queue)
+        lock (lockObject)
         {
             return queue.Count;
         }

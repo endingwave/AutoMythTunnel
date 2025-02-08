@@ -52,10 +52,20 @@ internal static class Program
             string mode = AnsiConsole.Prompt(
                 new SelectionPrompt<string>()
                     .Title("[bold purple]请选择加速模式[/]")
-                    .PageSize(3)
-                    .AddChoices("获取IP", "卡加速IP")
+                    .PageSize(4)
+                    .AddChoices("获取IP", "卡加速IP", "NaProxy-DE-自动改名")
             );
             AnsiConsole.MarkupLine($"[bold cyan]模式选择:[/] [bold underline yellow]{mode}[/]");
+            if (mode == "NaProxy-DE-自动改名")
+            {
+                string ip = AnsiConsole.Ask<string>("请输入IP");
+                string[] splitIpPort2 = ip.Split(":");
+                ProxyServer proxyServer2 = new("null", null, splitIpPort2[0],
+                    splitIpPort2.Length == 2 ? int.Parse(splitIpPort2[1]) : 25565, offline: true);
+                proxyServer2.Start();
+                AnsiConsole.MarkupLine("[bold green]开启代理成功, 请尽快加入服务器 localhost.[/]");
+                return;
+            }
             bool loginNew = true;
             string refreshToken = "";
             if (File.Exists("RefreshToken.txt"))

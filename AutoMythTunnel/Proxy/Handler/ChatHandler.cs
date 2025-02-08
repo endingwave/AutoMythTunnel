@@ -43,7 +43,9 @@ public class ChatHandler
         PreloadSoundFromResourceDir("5kill.wav");
         PreloadSoundFromResourceDir("morekill.wav");
     }
-    
+
+    public bool offline { get; set; }
+
     public static void PreloadSoundFromResourceDir(string resourceName)
     {
         try {
@@ -74,11 +76,12 @@ public class ChatHandler
         }
     }
     
-    public void OnPacket(EnumPacketType enumPacketId, PacketBuffer buffer, PacketProcessor processor)
+    public void OnPacket(EnumPacketType enumPacketId, PacketBuffer? buffer, PacketProcessor processor)
     {
         switch (enumPacketId)
         {
             case EnumPacketType.CLIENT_CHAT:
+                if (offline) break;
                 string message = buffer.ReadString();
                 if (message is "/req" or "/requeue" && lastPlayBuffer != null)
                 {
@@ -113,6 +116,46 @@ public class ChatHandler
                 break;
             }
             case EnumPacketType.SERVER_CHAT:
+                if (offline)
+                {
+                    JsonObject message2 = JsonObject.Parse(buffer.ReadString())!.AsObject();
+                    string rawMessage = message2["text"]?.GetValue<string>() ?? "";
+                    try {
+                        foreach (JsonNode? jsonNode in message2["extra"]?.AsArray())
+                        {
+                            if (jsonNode is not JsonObject obj) continue;
+                            rawMessage += obj["text"]?.GetValue<string>() ?? "";
+                        }
+                    } catch {}
+                    // Console.WriteLine(rawMessage);
+                    if (rawMessage.Contains("/register"))
+                    {
+                        AnsiConsole.MarkupLine("[bold green]Register command detected![/]");
+                        new Task(() =>
+                        {
+                            Thread.Sleep(1000);
+                            PacketBuffer playCommand = new(processor.clientStream.protocolVersion);
+                            playCommand.WriteVarInt(protocolVersion.ParsePacketId(EnumPacketType.CLIENT_CHAT));
+                            playCommand.WriteString("/register 2jvb4n5jh345 2jvb4n5jh345");
+                            processor.WriteToServer(playCommand);
+                            SendMessageToClient("Register command sent!", processor);
+                        }).Start();
+                    }
+                    if (rawMessage.Contains("/login"))
+                    {
+                        AnsiConsole.MarkupLine("[bold green]Login command detected![/]");
+                        new Task(() =>
+                        {
+                            Thread.Sleep(1000);
+                            PacketBuffer playCommand = new(processor.clientStream.protocolVersion);
+                            playCommand.WriteVarInt(protocolVersion.ParsePacketId(EnumPacketType.CLIENT_CHAT));
+                            playCommand.WriteString("/login 2jvb4n5jh345");
+                            processor.WriteToServer(playCommand);
+                            SendMessageToClient("Login command sent!", processor);
+                        }).Start();
+                    }
+                    break;
+                }
                 try {
                     if (IsFirstMessage)
                     {
@@ -173,18 +216,29 @@ public class ChatHandler
                 } catch (Exception e) {
                     AnsiConsole.MarkupLine($"[bold red]Error: {e.Message}[/]");
                 }
-
+                break;
+            case EnumPacketType.SERVER_DISCONNECT:
+                AnsiConsole.MarkupLine("[bold red]Disconnected from server![/]");
                 break;
         }
     }
     
-    public void SendMessageToClient(string message, PacketProcessor processor)
+    private void SendMessageToClient(string message, PacketProcessor processor)
     {
         PacketBuffer buffer = new(0);
         buffer.WriteVarInt(protocolVersion.ParsePacketId(EnumPacketType.SERVER_CHAT));
         JsonObject obj = new();
         obj["text"] = "§7§o[§b§oAuto§d§oMyth§a§oTunnel§r§7§o] " + message;
         buffer.WriteString(obj.ToString());
+        buffer.WriteByte(0);
+        processor.WriteToClient(buffer);
+    }
+    
+    private void SendRawMessageToClient(string message, PacketProcessor processor)
+    {
+        PacketBuffer buffer = new(0);
+        buffer.WriteVarInt(protocolVersion.ParsePacketId(EnumPacketType.SERVER_CHAT));
+        buffer.WriteString(message);
         buffer.WriteByte(0);
         processor.WriteToClient(buffer);
     }

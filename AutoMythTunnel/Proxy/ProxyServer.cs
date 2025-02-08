@@ -18,19 +18,62 @@ using static System.Net.IPAddress;
 
 namespace AutoMythTunnel.Proxy;
 
-public class ProxyServer(string minecraftAccessToken, ProxySettings? proxySettings = null, string targetServer = "mc.hypixel.net", int targetPort = 25565, int localPort = 25565, bool rewriteServerAddress = false, string? injectCommand = null)
+public class ProxyServer(string minecraftAccessToken, ProxySettings? proxySettings = null, string targetServer = "mc.hypixel.net", int targetPort = 25565, int localPort = 25565, bool rewriteServerAddress = false, string? injectCommand = null, bool offline = false)
 {
     private MinecraftProfile? _profile;
     private TcpListener? _listener;
     private CancellationTokenSource _cancellationTokenSource = new();
-    private readonly Deflater deflater = new();
     private int compressionThreshold = -1;
     public Action<string>? OnJoin { get; set; }
+    
+    public static string RandomString(int length)
+    {
+        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        StringBuilder builder = new();
+        for (int i = 0; i < length; i++)
+        {
+            builder.Append(chars[RandomNumberGenerator.GetInt32(0, chars.Length)]);
+        }
+        return builder.ToString();
+    }
+
+    public static string RandomName()
+    {
+        return RandomString(12);
+    }
+    
+    public static string RandomUuid()
+    {
+        const string chars = "0123456789abcdef";
+        StringBuilder builder = new();
+        string uuid = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx";
+        foreach (char c in uuid)
+        {
+            if (c == 'x')
+            {
+                builder.Append(chars[RandomNumberGenerator.GetInt32(0, 16)]);
+            }
+            else if (c == 'y')
+            {
+                builder.Append(chars[RandomNumberGenerator.GetInt32(8, 16)]);
+            }
+            else
+            {
+                builder.Append(c);
+            }
+        }
+        return builder.ToString();
+    }
 
     public void Start()
     {
         // get profile
-        _profile = MicrosoftApi.GetMcProfile(minecraftAccessToken);
+        if (!offline) _profile = MicrosoftApi.GetMcProfile(minecraftAccessToken);
+        else
+        {
+            string name = RandomName();
+            _profile = new MinecraftProfile(name, RandomUuid(), "null");
+        }
         _listener = new TcpListener(Any, localPort);
         _listener.Start();
         if (localPort == 25565) {
@@ -82,7 +125,8 @@ public class ProxyServer(string minecraftAccessToken, ProxySettings? proxySettin
                 {
                     PacketBuffer response = new(minecraftStream.protocolVersion);
                     response.WriteVarInt(0);
-                    response.WriteString("{\"version\":{\"name\":\"EndingWaveProxy\",\"protocol\":" + minecraftStream.protocolVersion + "},\"players\":{\"max\":20,\"online\":0},\"description\":{\"text\":\"§dTunnel §6Connector §bby §dEndingWave\n§dName: §b" + _profile!.Name + "\"}}");
+                    if (!offline) response.WriteString("{\"version\":{\"name\":\"EndingWaveProxy\",\"protocol\":" + minecraftStream.protocolVersion + "},\"players\":{\"max\":20,\"online\":0},\"description\":{\"text\":\"§dTunnel §6Connector §bby §dEndingWave\n§dName: §b" + _profile!.Name + "\"}}");
+                    else response.WriteString("{\"version\":{\"name\":\"EndingWaveProxy\",\"protocol\":" + minecraftStream.protocolVersion + "},\"players\":{\"max\":20,\"online\":0},\"description\":{\"text\":\"§dTunnel §6Connector §bby §dEndingWave\n§dName: §bRandomName\"}}");
                     minecraftStream.WritePacket(response);
                     break;
                 }
@@ -148,16 +192,21 @@ public class ProxyServer(string minecraftAccessToken, ProxySettings? proxySettin
             {
                 PacketBuffer buffer = clientMinecraftStream.ReadPacket();
                 int packetId = buffer.ReadVarInt();
+                bool skipNextRead = false;
                 switch (packetId)
                 {
                     case 0:
                         AnsiConsole.MarkupLine($"Info: Login start packet received from {client.Client.RemoteEndPoint}.");
-                        bool supported = ((List<int>) [47, 340]).Contains(clientMinecraftStream.protocolVersion);
+                        if (offline)
+                        {
+                            string name = RandomName();
+                            _profile = new MinecraftProfile(name, RandomUuid(), "null");
+                        }
+                        bool supported = ((List<int>) [47, 340]).Contains(clientMinecraftStream.protocolVersion) && !offline;
                         bool sendKeepAlive = supported;
                         if (supported)
                         {
-                            ProtocolVersion _protocolVersion =
-                                new ProtocolVersion(clientMinecraftStream.protocolVersion);
+                            ProtocolVersion _protocolVersion = new(clientMinecraftStream.protocolVersion);
                             // response login success
                             PacketBuffer loginSuccess = new(clientMinecraftStream.protocolVersion);
                             loginSuccess.WriteVarInt(2);
@@ -248,6 +297,15 @@ public class ProxyServer(string minecraftAccessToken, ProxySettings? proxySettin
                             _buffer.WriteByte(0);
                             clientMinecraftStream.WritePacket(_buffer);
                         }
+                        
+                        void SendRawMessageToClient(string msgJson)
+                        {
+                            PacketBuffer _buffer = new(0);
+                            _buffer.WriteVarInt(clientMinecraftStream.protocolVersion == 47 ? 0x02 : 0x0f);
+                            _buffer.WriteString(msgJson);
+                            _buffer.WriteByte(0);
+                            clientMinecraftStream.WritePacket(_buffer);
+                        }
 
                         if (proxySettings != null)
                         {
@@ -265,6 +323,7 @@ public class ProxyServer(string minecraftAccessToken, ProxySettings? proxySettin
                         MinecraftStream serverMinecraftStream = new(serverStream, clientMinecraftStream.protocolVersion);
                         if (supported) SendMessageToClient("Handshaking...");
                         // handshake
+                        PacketBuffer nextPacket;
                         PacketBuffer handshake = new(clientMinecraftStream.protocolVersion);
                         handshake.WriteVarInt(0);
                         handshake.WriteVarInt(clientMinecraftStream.protocolVersion);
@@ -280,61 +339,76 @@ public class ProxyServer(string minecraftAccessToken, ProxySettings? proxySettin
                         loginStartPacket.WriteString(_profile!.Name);
                         // loginStartPacket.WriteUuid(Uuid.Parse(_profile.Uuid));
                         serverMinecraftStream.WritePacket(loginStartPacket);
-                        PacketBuffer encryptionRequest = serverMinecraftStream.ReadPacket();
-                        packetId = encryptionRequest.ReadVarInt();
+                        nextPacket = serverMinecraftStream.ReadPacket();
+                        packetId = nextPacket.ReadVarInt();
                         if (packetId != 1)
                         {
-                            AnsiConsole.MarkupLine("Warn: Invalid packet received from server. packetId=" + packetId);
-                            if (supported && packetId == 0)
+                            AnsiConsole.MarkupLine("Warn: Not encrypt request packet received, pass to next processor. packetId=" + packetId);
+                            // recreate packet buffer
+                            nextPacket = new PacketBuffer(nextPacket.GetBuffer(), clientMinecraftStream.protocolVersion);
+                            skipNextRead = true;
+                        } 
+                        else if (!offline)
+                        {
+                            string serverId = nextPacket.ReadString();
+                            byte[] publicKey = nextPacket.ReadBytes(nextPacket.ReadVarInt());
+                            byte[] verifyToken = nextPacket.ReadBytes(nextPacket.ReadVarInt());
+                            Aes aes = Aes.Create();
+                            aes.KeySize = 128;
+                            aes.GenerateKey();
+
+                            string hex = EncryptionHelper.ComputeHash(serverId, aes.Key, publicKey);
+
+                            MicrosoftApi.RequireJoinServer(hex, _profile!.AccessToken, _profile!.Uuid.Replace("-", ""));
+                            RSA? rsa = EncryptionHelper.DecodePublicKey(publicKey);
+                            if (rsa == null)
                             {
-                                AnsiConsole.MarkupLine("Warn: Disconnect packet received.");
+                                throw new NullReferenceException("failed to decode public key");
+                            }
+                            byte[] sharedSecret = rsa.Encrypt(aes.Key, RSAEncryptionPadding.Pkcs1);
+                            byte[] encVerToken = rsa.Encrypt(verifyToken, RSAEncryptionPadding.Pkcs1);
+                            PacketBuffer encryptionResponse = new(clientMinecraftStream.protocolVersion);
+                            encryptionResponse.WriteVarInt(1);
+                            encryptionResponse.WriteVarInt(sharedSecret.Length);
+                            encryptionResponse.WriteBytes(sharedSecret);
+                            encryptionResponse.WriteVarInt(encVerToken.Length);
+                            encryptionResponse.WriteBytes(encVerToken);
+                            serverMinecraftStream.WritePacket(encryptionResponse);
+                            serverMinecraftStream.EnableEncryption(aes.Key);
+                        }
+                        else
+                        {
+                            AnsiConsole.MarkupLine("Warn: Offline mode, but encrypt request packet received.");
+                            serverStream.Dispose();
+                            if (supported) {
                                 PacketBuffer kickPacket = new(clientMinecraftStream.protocolVersion);
                                 kickPacket.WriteVarInt(clientMinecraftStream.protocolVersion == 47 ? 0x40 : 0x1a);
-                                kickPacket.WriteString(encryptionRequest.ReadString());
+                                JsonObject obj = new();
+                                obj["text"] = "§c§o服务器请求加密连接，但是您处于离线模式。";
+                                kickPacket.WriteString(obj.ToString());
                                 clientMinecraftStream.WritePacket(kickPacket);
-                                sendKeepAlive = false;
+                                client.Dispose();
+                                return;
                             }
-                            else clientMinecraftStream.WritePacket(encryptionRequest);
-                            serverStream.Dispose();
-                            client.Dispose();
-                            return;
                         }
-                        string serverId = encryptionRequest.ReadString();
-                        byte[] publicKey = encryptionRequest.ReadBytes(encryptionRequest.ReadVarInt());
-                        byte[] verifyToken = encryptionRequest.ReadBytes(encryptionRequest.ReadVarInt());
-                        Aes aes = Aes.Create();
-                        aes.KeySize = 128;
-                        aes.GenerateKey();
-
-                        string hex = EncryptionHelper.ComputeHash(serverId, aes.Key, publicKey);
-
-                        MicrosoftApi.RequireJoinServer(hex, _profile!.AccessToken, _profile!.Uuid.Replace("-", ""));
-                        RSA? rsa = EncryptionHelper.DecodePublicKey(publicKey);
-                        if (rsa == null)
-                        {
-                            throw new NullReferenceException("failed to decode public key");
-                        }
-                        byte[] sharedSecret = rsa.Encrypt(aes.Key, RSAEncryptionPadding.Pkcs1);
-                        byte[] encVerToken = rsa.Encrypt(verifyToken, RSAEncryptionPadding.Pkcs1);
-                        PacketBuffer encryptionResponse = new(clientMinecraftStream.protocolVersion);
-                        encryptionResponse.WriteVarInt(1);
-                        encryptionResponse.WriteVarInt(sharedSecret.Length);
-                        encryptionResponse.WriteBytes(sharedSecret);
-                        encryptionResponse.WriteVarInt(encVerToken.Length);
-                        encryptionResponse.WriteBytes(encVerToken);
-                        serverMinecraftStream.WritePacket(encryptionResponse);
-                        serverMinecraftStream.EnableEncryption(aes.Key);
                         
                         while (true)
                         {
                             // handle next packet to pass the login process
-                            PacketBuffer nextPacket = serverMinecraftStream.ReadPacket();
+                            if (skipNextRead)
+                            {
+                                skipNextRead = false;
+                            }
+                            else
+                            {
+                                nextPacket = serverMinecraftStream.ReadPacket();
+                            }
                             int nextPacketId = nextPacket.ReadVarInt();
                             if (nextPacketId == 2)
                             {
                                 if (supported) {
                                     SendMessageToClient("Joining...");
-                                    Thread.Sleep(1500);
+                                    if (!offline) Thread.Sleep(1500);
                                     // send respawn packet
                                     PacketBuffer respawnPacket = new(clientMinecraftStream.protocolVersion);
                                     respawnPacket.WriteVarInt(clientMinecraftStream.protocolVersion == 47 ? 0x07 : 0x35);
@@ -350,36 +424,42 @@ public class ProxyServer(string minecraftAccessToken, ProxySettings? proxySettin
                                 }
                                 break;
                             }
-                            else if (nextPacketId == 0)
+
+                            switch (nextPacketId)
                             {
-                                AnsiConsole.MarkupLine("Warn: Disconnect packet received.");
-                                if (supported) {
-                                    PacketBuffer kickPacket = new(clientMinecraftStream.protocolVersion);
-                                    kickPacket.WriteVarInt(clientMinecraftStream.protocolVersion == 47 ? 0x40 : 0x1a);
-                                    kickPacket.WriteString(nextPacket.ReadString());
-                                    clientMinecraftStream.WritePacket(kickPacket);
-                                    sendKeepAlive = false;
-                                }
-                                else
+                                case 0:
                                 {
-                                    clientMinecraftStream.WritePacket(new PacketBuffer(nextPacket.GetBuffer(), clientMinecraftStream.protocolVersion));
+                                    AnsiConsole.MarkupLine("Warn: Disconnect packet received.");
+                                    serverStream.Dispose();
+                                    if (supported) {
+                                        PacketBuffer kickPacket = new(clientMinecraftStream.protocolVersion);
+                                        kickPacket.WriteVarInt(clientMinecraftStream.protocolVersion == 47 ? 0x40 : 0x1a);
+                                        string reason = nextPacket.ReadString();
+                                        SendMessageToClient("Kicked from server");
+                                        SendRawMessageToClient(reason);
+                                        kickPacket.WriteString(reason);
+                                        SendMessageToClient("Proxy will be disconnected in 10 seconds.");
+                                        Thread.Sleep(10000);
+                                        clientMinecraftStream.WritePacket(kickPacket);
+                                        sendKeepAlive = false;
+                                    }
+                                    else
+                                    {
+                                        clientMinecraftStream.WritePacket(new PacketBuffer(nextPacket.GetBuffer(), clientMinecraftStream.protocolVersion));
+                                    }
+                                    client.Dispose();
+                                    return;
                                 }
-                                serverStream.Dispose();
-                                client.Dispose();
-                                return;
-                            }
-                            else if (nextPacketId == 3)
-                            {
-                                compressionThreshold = nextPacket.ReadVarInt();
-                                serverMinecraftStream.SetCompressionThreshold(compressionThreshold);
-                                SendMessageToClient("Set compression threshold to " + compressionThreshold);
-                            }
-                            else
-                            {
-                                AnsiConsole.MarkupLine($"[bold yellow]Warn: Invalid packet received from server. packetId={nextPacketId}[/]");
-                                serverStream.Dispose();
-                                client.Dispose();
-                                return;
+                                case 3:
+                                    compressionThreshold = nextPacket.ReadVarInt();
+                                    serverMinecraftStream.SetCompressionThreshold(compressionThreshold);
+                                    if (supported) SendMessageToClient("Set compression threshold to " + compressionThreshold);
+                                    break;
+                                default:
+                                    AnsiConsole.MarkupLine($"[bold yellow]Warn: Invalid packet received from server. packetId={nextPacketId}[/]");
+                                    serverStream.Dispose();
+                                    client.Dispose();
+                                    return;
                             }
                         }
                         sendKeepAlive = false;
@@ -416,7 +496,7 @@ public class ProxyServer(string minecraftAccessToken, ProxySettings? proxySettin
             Task task1 = Task.Run(() => CopyStream(stream1, stream2, s2cQueue));
             Task task2 = Task.Run(() => CopyStream(stream2, stream1, c2sQueue));
             if (ProtocolVersion.SUPPORTED_VERSIONS.Contains(stream1.protocolVersion)) {
-                PacketProcessor processor = new(c2sQueue, s2cQueue, stream2, stream1, null, compressionThreshold, injectCommand: injectCommand);
+                PacketProcessor processor = new(c2sQueue, s2cQueue, stream2, stream1, null, compressionThreshold, injectCommand: injectCommand, offline: offline);
                 Task.Run(() => processor.Start());
             }
             else

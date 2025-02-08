@@ -75,7 +75,6 @@ public static class StringUtils
     public static void PrintColoredMessage(string message)
     {
         // Example: Parse the message and apply colors
-        // This is a simple example, you may need to adjust the parsing logic based on your message format
         string coloredMessage = message
             .Replace("§0", "[black]")
             .Replace("§1", "[blue]")
